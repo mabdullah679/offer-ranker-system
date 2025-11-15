@@ -1,0 +1,11 @@
+# Copy this file to terraform.tfvars and fill in real values
+project_id        = "my-gcp-project"
+region            = "us-central1"
+service_name      = "offer-ranker-api"
+image             = "us-central1-docker.pkg.dev/my-gcp-project/offers/offer-ranker-api:latest"
+service_account_email = "cloud-run-deployer@my-gcp-project.iam.gserviceaccount.com"
+# Optional overrides
+# max_instances = 5
+# min_instances = 0
+# concurrency   = 80
+# environment   = "prod"
