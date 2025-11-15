@@ -13,10 +13,6 @@ resource "google_cloud_run_v2_service" "offer_api" {
         name  = "ENV"
         value = var.environment
       }
-      env {
-        name  = "PORT"
-        value = "8080"
-      }
     }
 
     max_instance_request_concurrency = var.concurrency
