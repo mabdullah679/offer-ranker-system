@@ -1,0 +1,30 @@
+expected_columns:
+  - customer_id
+  - age
+  - tenure_months
+  - monthly_spend
+  - num_support_tickets
+  - is_upsell_accepted
+
+column_types:
+  customer_id: int
+  age: int
+  tenure_months: int
+  monthly_spend: float
+  num_support_tickets: int
+  is_upsell_accepted: int
+
+value_ranges:
+  age: [0, 120]
+  tenure_months: [0, 600]
+  monthly_spend: [0, 10000]
+  num_support_tickets: [0, 100]
+
+missing_value_policy:
+  allow_missing: false
+
+categorical_values:
+  is_upsell_accepted: [0, 1]
+
+uniqueness:
+  - customer_id
