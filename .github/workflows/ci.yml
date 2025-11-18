@@ -3,6 +3,7 @@ name: ci
 on:
   push:
     branches: ["dev"]
+  workflow_dispatch:
 
 jobs:
   build-test-scan:
@@ -17,21 +18,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Set up venv and install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt
+          pip install -r training/requirements.txt
           pip install pip-audit==2.7.3
 
       - name: Run pytest
-        run: pytest api/tests
+        run: .venv/bin/pytest api/tests
 
       - name: Run data quality checks
-        run: python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
+        run: .venv/bin/python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
 
       - name: Dependency audit
         run: |
-          pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
+          .venv/bin/pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
 
       - name: Build Docker image (no push)
         run: docker build -t offer-ranker-api:ci ./api

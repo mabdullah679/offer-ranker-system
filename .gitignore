@@ -2,3 +2,5 @@
 .terraform/
 **/.venv/**
 **/.terraform/**
+# Ignore local GCP service account keys
+offer-ranker-api-*.json

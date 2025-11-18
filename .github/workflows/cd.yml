@@ -2,7 +2,8 @@ name: cd
 
 on:
   push:
-    branches: ["main"]
+    branches: ["dev"]
+  workflow_dispatch:
 
 env:
   GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -24,21 +25,24 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Set up venv and install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt
+          pip install -r training/requirements.txt
           pip install pip-audit==2.7.3
 
       - name: Run pytest
-        run: pytest api/tests
+        run: .venv/bin/pytest api/tests
 
       - name: Run data quality checks
-        run: python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
+        run: .venv/bin/python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
 
       - name: Dependency audit
         run: |
-          pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
+          .venv/bin/pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
 
   orchestrate-model:
     runs-on: ubuntu-latest
@@ -53,8 +57,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Set up venv and install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt
 
@@ -68,7 +74,7 @@ jobs:
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
           GCS_MODEL_BUCKET: ${{ env.GCS_MODEL_BUCKET }}
           GCP_REGION: ${{ env.GCP_REGION }}
-        run: python -m orchestration.pipeline
+        run: .venv/bin/python -m orchestration.pipeline
 
       - name: Upload promoted model artifact
         uses: actions/upload-artifact@v4
