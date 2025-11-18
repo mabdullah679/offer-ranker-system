@@ -1,0 +1,273 @@
+name: cd-manual
+
+on:
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  GCS_MODEL_BUCKET: ${{ secrets.GCS_MODEL_BUCKET }}
+  SERVICE_NAME: offer-ranker-api
+  ARTIFACT_REPO: offer-ranker-api
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up venv and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+          if [ -f training/requirements.txt ]; then
+            pip install -r training/requirements.txt
+          else
+            pip install pandas pyyaml
+          fi
+          pip install pip-audit==2.7.3
+
+      - name: Run pytest
+        run: .venv/bin/pytest api/tests
+
+      - name: Run data quality checks
+        run: |
+          source .venv/bin/activate
+          if [ -f training/data/customers.csv ]; then
+            python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
+          else
+            echo "training/data/customers.csv missing; skipping DQ validation."
+          fi
+
+      - name: Dependency audit
+        run: |
+          source .venv/bin/activate
+          if [ -f training/requirements.txt ]; then
+            pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL || true
+          else
+            pip-audit -r api/requirements.txt --severity HIGH --severity CRITICAL || true
+          fi
+
+  orchestrate-model:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up venv and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Prepare promoted model artifact
+        run: |
+          mkdir -p api/models
+          if [ ! -f api/models/offer_model.joblib ]; then
+            echo "Missing api/models/offer_model.joblib"; exit 1;
+          fi
+          if [ ! -f api/models/model_metadata.json ]; then
+            cat > api/models/model_metadata.json <<'EOF'
+{"version":"ci","generated_at":"${GITHUB_SHA}"}
+EOF
+          fi
+
+      - name: Upload promoted model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: promoted-model
+          path: |
+            api/models/offer_model.joblib
+            api/models/model_metadata.json
+          if-no-files-found: error
+
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    needs: orchestrate-model
+    env:
+      PYTHONUNBUFFERED: "1"
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download promoted model
+        uses: actions/download-artifact@v4
+        with:
+          name: promoted-model
+          path: artifacts/promoted-model
+
+      - name: Place model artifact
+        run: |
+          mkdir -p api/models
+          cp artifacts/promoted-model/api/models/offer_model.joblib api/models/offer_model.joblib
+          if [[ -f artifacts/promoted-model/api/models/model_metadata.json ]]; then
+            cp artifacts/promoted-model/api/models/model_metadata.json api/models/model_metadata.json
+          fi
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
+
+      - name: Build image
+        id: build-image
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPO}/offer-ranker-api:${GITHUB_SHA}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          docker build -t "${IMAGE}" ./api
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ steps.build-image.outputs.image }}
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          exit-code: "0"
+
+      - name: Push image to Artifact Registry
+        run: docker push "${{ steps.build-image.outputs.image }}"
+
+  apply-terraform:
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    env:
+      PYTHONUNBUFFERED: "1"
+    outputs:
+      service_url: ${{ steps.tf-output.outputs.service_url }}
+      previous_image: ${{ steps.capture-prev.outputs.previous_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Ensure deployer service account exists
+        run: |
+          gcloud iam service-accounts create "ci-cd-deployer" --display-name="CI/CD Deployer" || true
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/run.admin"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/iam.serviceAccountUser"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/storage.admin"
+
+      - id: capture-prev
+        name: Capture previous image (for rollback)
+        run: |
+          set +e
+          PREV_IMAGE=$(gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --format="value(template.spec.containers[0].image)")
+          set -e
+          echo "previous_image=${PREV_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform init
+        working-directory: api/infrastructure
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: api/infrastructure
+        env:
+          IMAGE: ${{ needs.build-and-push-image.outputs.image }}
+        run: |
+          terraform apply -auto-approve \
+            -var="project_id=${GCP_PROJECT_ID}" \
+            -var="region=${GCP_REGION}" \
+            -var="image=${IMAGE}" \
+            -var="service_name=${SERVICE_NAME}" \
+            -var="gcs_model_bucket=${GCS_MODEL_BUCKET}" \
+            -var="service_account_email=ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+
+      - id: tf-output
+        name: Capture Terraform outputs
+        working-directory: api/infrastructure
+        run: |
+          SERVICE_URL=$(terraform output -raw service_url)
+          echo "service_url=${SERVICE_URL}" >> "$GITHUB_OUTPUT"
+
+  smoke-tests:
+    runs-on: ubuntu-latest
+    needs: apply-terraform
+    env:
+      SERVICE_URL: ${{ needs.apply-terraform.outputs.service_url }}
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Run smoke tests
+        id: smoke
+        run: |
+          echo "Hitting ${SERVICE_URL}"
+          health_status=$(curl -s -o /tmp/health.json -w "%{http_code}" "${SERVICE_URL}/health")
+          if [[ "${health_status}" != "200" ]]; then
+            echo "Health check failed with status ${health_status}"
+            cat /tmp/health.json
+            exit 1
+          fi
+          payload='{"age":30,"tenure_months":24,"monthly_spend":120.5,"num_support_tickets":2}'
+          predict_status=$(curl -s -o /tmp/predict.json -w "%{http_code}" -X POST "${SERVICE_URL}/predict" -H "Content-Type: application/json" -d "${payload}")
+          if [[ "${predict_status}" != "200" ]]; then
+            echo "Predict check failed with status ${predict_status}"
+            cat /tmp/predict.json
+            exit 1
+          fi
+          echo "Smoke tests passed."
+
+      - name: Roll back on failure
+        if: failure() && needs.apply-terraform.outputs.previous_image != ''
+        env:
+          PREV_IMAGE: ${{ needs.apply-terraform.outputs.previous_image }}
+        run: |
+          echo "Rolling back to previous image ${PREV_IMAGE}"
+          gcloud run services update "${SERVICE_NAME}" --region "${GCP_REGION}" --image "${PREV_IMAGE}"
