@@ -64,6 +64,7 @@ jobs:
     needs: build-and-test
     env:
       PYTHONUNBUFFERED: "1"
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 
@@ -86,10 +87,11 @@ jobs:
 
       - name: Run orchestration pipeline
         env:
+          PYTHONPATH: ${{ github.workspace }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
           GCS_MODEL_BUCKET: ${{ env.GCS_MODEL_BUCKET }}
           GCP_REGION: ${{ env.GCP_REGION }}
-        run: .venv/bin/python -m orchestration.pipeline
+        run: .venv/bin/python api/orchestrate.py
 
       - name: Upload promoted model artifact
         uses: actions/upload-artifact@v4
