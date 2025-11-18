@@ -85,13 +85,17 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Run orchestration pipeline
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-          GCS_MODEL_BUCKET: ${{ env.GCS_MODEL_BUCKET }}
-          GCP_REGION: ${{ env.GCP_REGION }}
-        run: .venv/bin/python api/orchestrate.py deploy
+      - name: Prepare promoted model artifact
+        run: |
+          mkdir -p api/models
+          if [ ! -f api/models/offer_model.joblib ]; then
+            echo "Missing api/models/offer_model.joblib"; exit 1;
+          fi
+          if [ ! -f api/models/model_metadata.json ]; then
+            cat > api/models/model_metadata.json <<'EOF'
+            {"version":"ci","generated_at":"${GITHUB_SHA}"}
+            EOF
+          fi
 
       - name: Upload promoted model artifact
         uses: actions/upload-artifact@v4
