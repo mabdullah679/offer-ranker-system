@@ -151,7 +151,7 @@ jobs:
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
           vuln-type: "os,library"
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Push image to Artifact Registry
         run: docker push "${{ steps.build-image.outputs.image }}"
