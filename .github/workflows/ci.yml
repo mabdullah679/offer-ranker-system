@@ -1,30 +1,16 @@
-name: CI
+name: ci
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-
-# Required secrets:
-# - GCP_SERVICE_ACCOUNT_KEY: Service account JSON with permissions for Artifact Registry, Cloud Run, and Terraform-managed resources
-# - GCP_PROJECT_ID / GCP_REGION / CLOUD_RUN_SERVICE_NAME / ARTIFACT_REGISTRY_REPO: Terraform + docker variables
-# - CLOUD_RUN_SERVICE_ACCOUNT: Service account email used by Cloud Run
-env:
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GCP_REGION: ${{ secrets.GCP_REGION }}
-  CLOUD_RUN_SERVICE_NAME: ${{ secrets.CLOUD_RUN_SERVICE_NAME }}
-  ARTIFACT_REGISTRY_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
-  SERVICE_ACCOUNT_EMAIL: ${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT }}
-  IMAGE_URI: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/offer-ranker-api:${{ github.sha }}
+    branches: ["dev"]
 
 jobs:
-  build-test-plan:
+  build-test-scan:
     runs-on: ubuntu-latest
-
+    env:
+      PYTHONUNBUFFERED: "1"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,62 +18,29 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+          pip install pip-audit==2.7.3
 
-      - name: Run tests
-        run: make test
+      - name: Run pytest
+        run: pytest api/tests
 
-      - name: Build Docker image
-        run: docker build -t ${{ env.IMAGE_URI }} .
+      - name: Run data quality checks
+        run: python dq/dq_cli.py validate training/data/customers.csv --config dq/dq_rules.yaml --format json
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Dependency audit
+        run: |
+          pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
+
+      - name: Build Docker image (no push)
+        run: docker build -t offer-ranker-api:ci ./api
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-
-      - name: Set up gcloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker auth
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
-
-      - name: Push Docker image
-        run: docker push ${{ env.IMAGE_URI }}
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.7.5
-
-      - name: Terraform Init
-        working-directory: infrastructure
-        env:
-          TF_VAR_project_id: ${{ env.GCP_PROJECT_ID }}
-          TF_VAR_region: ${{ env.GCP_REGION }}
-          TF_VAR_service_name: ${{ env.CLOUD_RUN_SERVICE_NAME }}
-          TF_VAR_image: ${{ env.IMAGE_URI }}
-          TF_VAR_service_account_email: ${{ env.SERVICE_ACCOUNT_EMAIL }}
-        run: terraform init -input=false
-
-      - name: Terraform Plan
-        working-directory: infrastructure
-        env:
-          TF_VAR_project_id: ${{ env.GCP_PROJECT_ID }}
-          TF_VAR_region: ${{ env.GCP_REGION }}
-          TF_VAR_service_name: ${{ env.CLOUD_RUN_SERVICE_NAME }}
-          TF_VAR_image: ${{ env.IMAGE_URI }}
-          TF_VAR_service_account_email: ${{ env.SERVICE_ACCOUNT_EMAIL }}
-        run: terraform plan -input=false -out=tfplan
-
-      - name: Export plan JSON
-        working-directory: infrastructure
-        run: terraform show -json tfplan > tfplan.json
-
-      - name: Upload Terraform artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: |
-            infrastructure/tfplan
-            infrastructure/tfplan.json
-          retention-days: 7
+          image-ref: "offer-ranker-api:ci"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          exit-code: "1"
