@@ -46,7 +46,12 @@ jobs:
 
       - name: Dependency audit
         run: |
-          .venv/bin/pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
+          source .venv/bin/activate
+          if [ -f training/requirements.txt ]; then
+            pip-audit -r api/requirements.txt -r training/requirements.txt --severity HIGH --severity CRITICAL
+          else
+            pip-audit -r api/requirements.txt --severity HIGH --severity CRITICAL
+          fi
 
       - name: Build Docker image (no push)
         run: docker build -t offer-ranker-api:ci ./api
