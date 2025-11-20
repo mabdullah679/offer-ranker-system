@@ -1,8 +1,6 @@
 name: cd-manual
 
 on:
-  push:
-    branches: ["dev"]
   workflow_dispatch:
 
 env:
@@ -93,8 +91,8 @@ jobs:
           fi
           if [ ! -f api/models/model_metadata.json ]; then
             cat > api/models/model_metadata.json <<'EOF'
-            {"version":"ci","generated_at":"${GITHUB_SHA}"}
-            EOF
+{"version":"ci","generated_at":"${GITHUB_SHA}"}
+EOF
           fi
 
       - name: Upload promoted model artifact
