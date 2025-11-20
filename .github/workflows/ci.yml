@@ -5,6 +5,12 @@ on:
     branches: ["dev"]
   workflow_dispatch:
 
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ secrets.GCP_REGION }}
+  ARTIFACT_REPO: offer-ranker-api
+  SERVICE_NAME: offer-ranker-api
+
 jobs:
   build-test-scan:
     runs-on: ubuntu-latest
@@ -53,14 +59,46 @@ jobs:
             pip-audit -r api/requirements.txt --severity HIGH --severity CRITICAL || true
           fi
 
-      - name: Build Docker image (no push)
-        run: docker build -t offer-ranker-api:ci ./api
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
+
+      - name: Build Docker image
+        id: build-image
+        run: |
+          IMAGE_SHA="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPO}/offer-ranker-api:${GITHUB_SHA}"
+          IMAGE_LATEST="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPO}/offer-ranker-api:latest"
+          docker build -t "${IMAGE_SHA}" -t "${IMAGE_LATEST}" ./api
+          echo "image=${IMAGE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${IMAGE_LATEST}" >> "$GITHUB_OUTPUT"
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: "offer-ranker-api:ci"
+          image-ref: ${{ steps.build-image.outputs.image }}
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
           vuln-type: "os,library"
           exit-code: "0"
+
+      - name: Push image to Artifact Registry
+        run: |
+          docker push "${{ steps.build-image.outputs.image }}"
+          docker push "${{ steps.build-image.outputs.image_latest }}"
+
+      - name: Publish image info
+        run: |
+          {
+            echo "Pushed images:"
+            echo "- ${{ steps.build-image.outputs.image }}"
+            echo "- ${{ steps.build-image.outputs.image_latest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
