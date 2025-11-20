@@ -23,6 +23,14 @@ variable "service_account_email" {
   type        = string
 }
 
+# Optional: model bucket (present for workflow compatibility; unused in current resources)
+variable "gcs_model_bucket" {
+  description = "GCS bucket holding model artifacts (unused by current module)"
+  type        = string
+  default     = ""
+}
+
+
 variable "max_instances" {
   description = "Maximum number of Cloud Run instances"
   type        = number

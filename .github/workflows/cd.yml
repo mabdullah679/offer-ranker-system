@@ -83,6 +83,8 @@ jobs:
             -var="gcs_model_bucket=${GCS_MODEL_BUCKET}" \
             -var="service_account_email=ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
+            
+
       - id: tf-output
         name: Capture Terraform outputs
         working-directory: api/infrastructure
