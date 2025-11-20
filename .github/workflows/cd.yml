@@ -83,7 +83,7 @@ jobs:
             -var="gcs_model_bucket=${GCS_MODEL_BUCKET}" \
             -var="service_account_email=ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
 
-            
+
 
       - id: tf-output
         name: Capture Terraform outputs
@@ -134,4 +134,18 @@ jobs:
             echo "Sample commands:"
             echo "\\`curl -s ${SERVICE_URL}/health\\`"
             echo "curl -s -X POST ${SERVICE_URL}/predict -H 'Content-Type: application/json' -d '{\"age\":30,\"tenure_months\":24,\"monthly_spend\":120.5,\"num_support_tickets\":2}'"
+          } >> "$GITHUB_STEP_SUMMARY"
+          
+      - name: Verify cleanup
+        run: |
+          {
+            echo "Cleanup verification:"
+            echo "Cloud Run services (should be empty):"
+            gcloud run services list --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" || true
+            echo
+            echo "Artifact Registry repos (should be empty):"
+            gcloud artifacts repositories list --project "${GCP_PROJECT_ID}" --location "${GCP_REGION}" || true
+            echo
+            echo "Buckets (model bucket should be gone):"
+            gcloud storage ls --project "${GCP_PROJECT_ID}" || true
           } >> "$GITHUB_STEP_SUMMARY"
