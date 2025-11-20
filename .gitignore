@@ -4,3 +4,13 @@
 **/.terraform/**
 # Ignore local GCP service account keys
 offer-ranker-api-*.json
+.DS_Store
+api/.DS_Store
+api/app/.DS_Store
+api/tests/.DS_Store
+dq/.DS_Store
+.DS_Store
+api/.DS_Store
+api/app/.DS_Store
+api/tests/.DS_Store
+dq/.DS_Store
