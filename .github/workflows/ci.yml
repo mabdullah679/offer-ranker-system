@@ -69,6 +69,17 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          if ! gcloud artifacts repositories describe "${ARTIFACT_REPO}" --location "${GCP_REGION}" >/dev/null 2>&1; then
+            gcloud artifacts repositories create "${ARTIFACT_REPO}" \
+              --repository-format=docker \
+              --location "${GCP_REGION}" \
+              --description "Offer Ranker images"
+          else
+            echo "Repository ${ARTIFACT_REPO} exists in ${GCP_REGION}"
+          fi
+
       - name: Configure Docker auth
         run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev"
 
