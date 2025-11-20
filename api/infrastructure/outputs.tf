@@ -3,6 +3,11 @@ output "cloud_run_url" {
   value       = google_cloud_run_v2_service.offer_api.uri
 }
 
+output "service_url" {
+  description = "Alias for Cloud Run URL (used by workflows)"
+  value       = google_cloud_run_v2_service.offer_api.uri
+}
+
 output "cloud_run_service_name" {
   description = "Name of the Cloud Run service"
   value       = google_cloud_run_v2_service.offer_api.name
