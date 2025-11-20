@@ -58,19 +58,6 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Ensure deployer service account exists
-        run: |
-          gcloud iam service-accounts create "ci-cd-deployer" --display-name="CI/CD Deployer" || true
-          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
-            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
-            --role "roles/run.admin"
-          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
-            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
-            --role "roles/iam.serviceAccountUser"
-          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
-            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
-            --role "roles/storage.admin"
-
       - id: capture-prev
         name: Capture previous image (for rollback)
         run: |
