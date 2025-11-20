@@ -90,9 +90,7 @@ jobs:
             echo "Missing api/models/offer_model.joblib"; exit 1;
           fi
           if [ ! -f api/models/model_metadata.json ]; then
-            cat > api/models/model_metadata.json <<EOF
-{"version":"ci","generated_at":"${GITHUB_SHA}"}
-EOF
+            printf '{"version":"ci","generated_at":"%s"}\n' "${GITHUB_SHA}" > api/models/model_metadata.json
           fi
 
       - name: Upload promoted model artifact
