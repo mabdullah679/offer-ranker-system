@@ -21,6 +21,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download promoted model
+        uses: actions/download-artifact@v4
+        with:
+          name: promoted-model
+          path: artifacts/promoted-model
+        continue-on-error: true
+
+      - name: Place model artifact
+        run: |
+          mkdir -p api/models
+          JOBLIB_PATH=$(find artifacts/promoted-model -name "offer_model.joblib" -print -quit 2>/dev/null || true)
+          if [ -z "${JOBLIB_PATH}" ]; then
+            echo "Promoted model artifact missing. Upload an artifact named 'promoted-model' containing api/models/offer_model.joblib before rerunning."
+            exit 1
+          fi
+          cp "${JOBLIB_PATH}" api/models/offer_model.joblib
+          META_PATH=$(find artifacts/promoted-model -name "model_metadata.json" -print -quit 2>/dev/null || true)
+          if [ -n "${META_PATH}" ]; then
+            cp "${META_PATH}" api/models/model_metadata.json
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
