@@ -25,7 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONUNBUFFERED: "1"
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       contains(github.event.workflow_run.head_commit.message, 'ci-cd'))
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,6 +43,19 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Ensure deployer service account exists
+        run: |
+          gcloud iam service-accounts create "ci-cd-deployer" --display-name="CI/CD Deployer" || true
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/run.admin"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/iam.serviceAccountUser"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/storage.admin"
 
       - name: Ensure Artifact Registry repository exists
         run: |

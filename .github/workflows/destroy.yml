@@ -46,12 +46,12 @@ jobs:
         run: |
           {
             echo "Cleanup verification:"
-            echo "Cloud Run services (should be empty):"
+            echo "Cloud Run services in project/region:"
             gcloud run services list --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" || true
             echo
-            echo "Artifact Registry repos (should be empty):"
+            echo "Artifact Registry repos in region:"
             gcloud artifacts repositories list --project "${GCP_PROJECT_ID}" --location "${GCP_REGION}" || true
             echo
-            echo "Buckets (model bucket should be gone):"
+            echo "Buckets in project (model bucket should be gone):"
             gcloud storage ls --project "${GCP_PROJECT_ID}" || true
           } >> "$GITHUB_STEP_SUMMARY"

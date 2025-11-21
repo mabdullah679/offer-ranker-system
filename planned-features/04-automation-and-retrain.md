@@ -26,6 +26,12 @@ Automate training/evaluation and promote only if a new model beats the incumbent
 - Training data access (GCS or repo data).
 - Cloud Scheduler + Cloud Run jobs enabled.
 
+## Cost & Free Tier Considerations
+- Prefer running the training and evaluation pipeline on a local machine or GitHub-hosted runners, keeping GCP usage limited to storing the resulting compressed model artifact in GCS.
+- If GCP-based training is ever used, keep schedules infrequent (manual or at most weekly), choose the smallest suitable machine sizes, and use subsampled data so compute time remains within or close to free-tier limits.
+- Apply the same discipline as the model registry: keep only a few candidate models in GCS, prune aggressively, and ensure total stored model size stays under the free storage allowance.
+- Document that, for this project, automation and retrain flows are conceptual and not intended for continuous, production-scale runs.
+
 ## Acceptance Criteria
 - Scheduled job runs, trains, evaluates, registers a version with metrics.
 - Promotion decision is logged and respects improvement threshold.

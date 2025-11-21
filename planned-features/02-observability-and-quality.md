@@ -25,6 +25,12 @@ Monitor API health, performance, and model output quality with actionable alerts
 - Cloud Monitoring/Logging enabled; service account with logging/monitoring write.
 - Baseline distribution stored from training (serialize stats with the model).
 
+## Cost & Free Tier Considerations
+- Assume no real user traffic and low request volume; configure observability to avoid noisy or high-cardinality data so usage stays near free-tier levels.
+- For Cloud Logging, emit structured summaries only (e.g., `request_id`, path, status, model_version, simple validation result) and avoid logging full request bodies or large payloads.
+- Rely primarily on built-in Cloud Run metrics for request count/latency; keep any custom or log-based metrics to a small, fixed set without per-user or per-request labels.
+- If adding uptime checks or drift/PSI jobs, run them infrequently (e.g., manual or daily/weekly) on small samples using the smallest Cloud Run job size, so compute minutes remain within free-tier budgets.
+
 ## Acceptance Criteria
 - Dashboards show request/error/latency; alerts fire on configured thresholds.
 - Invalid payloads are rejected with 400 and logged.

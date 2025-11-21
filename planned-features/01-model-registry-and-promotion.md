@@ -25,6 +25,11 @@ Track models by version with immutable artifacts and metrics, and deploy by vers
 - GCS bucket for registry; service account with read/write to bucket.
 - Minor code changes in CI/CD + API.
 
+## Cost & Free Tier Considerations
+- Use a single small GCS bucket in a free-tier-eligible region and keep total model artifacts + metadata well under the GCS free storage limit.
+- Store only the final serialized model per version (no large intermediate artifacts) and regularly prune or compress old versions.
+- If this remains a non-production, low-traffic project, a handful of small models (tens of MB total) should remain effectively within free tier; delete unused versions if storage approaches free limits.
+
 ## Acceptance Criteria
 - Given a version in registry, CD deploys it without manual artifact placement.
 - `/info` returns the deployed version and matches registry metadata.

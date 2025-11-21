@@ -23,9 +23,8 @@ variable "service_account_email" {
   type        = string
 }
 
-# Optional: model bucket (present for workflow compatibility; unused in current resources)
 variable "gcs_model_bucket" {
-  description = "GCS bucket holding model artifacts (unused by current module)"
+  description = "GCS bucket holding model artifacts (managed outside this module)"
   type        = string
   default     = ""
 }

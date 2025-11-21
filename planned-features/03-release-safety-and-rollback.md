@@ -23,6 +23,11 @@ Deploy safely with canary/shadow options and fast rollback on regression.
 - Cloud Run traffic-splitting enabled; CD can set traffic rules.
 - Logging/metrics in place to compare outputs.
 
+## Cost & Free Tier Considerations
+- For this project (no real user traffic), treat canary and shadow deployments as short-lived experiments rather than long-running multi-revision setups.
+- When experimenting, keep Cloud Run CPU/RAM minimal and limit the duration of canary/shadow phases so additional concurrent revisions do not materially exceed free-tier compute.
+- Avoid running multiple high-traffic revisions in parallel; once tests or comparisons complete, consolidate traffic back to a single active revision to minimize resource usage.
+
 ## Acceptance Criteria
 - CD can deploy with canary traffic and roll forward/rollback based on health.
 - Shadow mode collects comparison logs without impacting responses.

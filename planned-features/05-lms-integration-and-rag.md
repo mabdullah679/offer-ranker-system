@@ -28,6 +28,12 @@ Serve multiple small models (ads, ideation, etc.) with per-tenant context via li
 - Context store (FAISS + GCS persistence or Firestore) and an embedding model/container.
 - Optional search API key per tenant.
 
+## Cost & Free Tier Considerations
+- Treat LMS integration and RAG as conceptual and experimental only, with at most a small number of manual test queries (on the order of tens of requests).
+- Prefer local or GitHub-hosted embedding and retrieval components; if GCP persistence is used, keep the vector index tiny so storage and compute stay negligible.
+- If external LLM or search APIs are involved, rely on their free tiers and clearly scope usage to a handful of test runs, not continuous production traffic.
+- Avoid always-on RAG services; spin up any supporting infrastructure only when testing, and tear it down or keep it local to prevent background charges.
+
 ## Acceptance Criteria
 - API can route requests to different models by id/version.
 - RAG path returns answers with source metadata; honors per-tenant context.

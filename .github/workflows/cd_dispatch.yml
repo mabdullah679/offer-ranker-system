@@ -35,6 +35,19 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Ensure deployer service account exists
+        run: |
+          gcloud iam service-accounts create "ci-cd-deployer" --display-name="CI/CD Deployer" || true
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/run.admin"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/iam.serviceAccountUser"
+          gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+            --member "serviceAccount:ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role "roles/storage.admin"
+
       - name: Ensure Artifact Registry repository exists
         run: |
           if ! gcloud artifacts repositories describe "${ARTIFACT_REPO}" --location "${GCP_REGION}" >/dev/null 2>&1; then
