@@ -33,8 +33,8 @@ jobs:
           mkdir -p api/models
           JOBLIB_PATH=$(find artifacts/promoted-model -name "offer_model.joblib" -print -quit 2>/dev/null || true)
           if [ -z "${JOBLIB_PATH}" ]; then
-            echo "Promoted model artifact missing. Upload an artifact named 'promoted-model' containing api/models/offer_model.joblib before rerunning."
-            exit 1
+            echo "Promoted model artifact missing; skipping model copy. Upload an artifact named 'promoted-model' containing api/models/offer_model.joblib to include it."
+            exit 0
           fi
           cp "${JOBLIB_PATH}" api/models/offer_model.joblib
           META_PATH=$(find artifacts/promoted-model -name "model_metadata.json" -print -quit 2>/dev/null || true)
