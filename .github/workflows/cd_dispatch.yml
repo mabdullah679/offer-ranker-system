@@ -67,9 +67,6 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-
       - id: capture-prev
         name: Capture previous image (for rollback)
         run: |
@@ -78,34 +75,39 @@ jobs:
           set -e
           echo "previous_image=${PREV_IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Terraform init
-        working-directory: api/infrastructure
-        run: terraform init
-
-      - name: Terraform apply
-        working-directory: api/infrastructure
+      - name: Deploy to Cloud Run
+        id: deploy
         env:
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
-          terraform apply -auto-approve \
-            -var="project_id=${GCP_PROJECT_ID}" \
-            -var="region=${GCP_REGION}" \
-            -var="image=${IMAGE}" \
-            -var="service_name=${SERVICE_NAME}" \
-            -var="gcs_model_bucket=${GCS_MODEL_BUCKET}" \
-            -var="service_account_email=ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+          echo "Deploying image ${IMAGE} to Cloud Run service ${SERVICE_NAME} in ${GCP_REGION}"
+          if gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" >/dev/null 2>&1; then
+            gcloud run services update "${SERVICE_NAME}" \
+              --region "${GCP_REGION}" \
+              --image "${IMAGE}"
+          else
+            gcloud run deploy "${SERVICE_NAME}" \
+              --image "${IMAGE}" \
+              --region "${GCP_REGION}" \
+              --platform=managed \
+              --allow-unauthenticated \
+              --service-account "ci-cd-deployer@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+              --concurrency=80 \
+              --min-instances=0 \
+              --max-instances=3 \
+              --set-env-vars "ENV=dev"
+          fi
 
-      - id: tf-output
-        name: Capture Terraform outputs
-        working-directory: api/infrastructure
+      - id: service-info
+        name: Capture service URL
         run: |
-          SERVICE_URL=$(terraform output -raw service_url)
+          SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --format="value(status.url)")
           echo "service_url=${SERVICE_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Run smoke tests
         id: smoke
         env:
-          SERVICE_URL: ${{ steps.tf-output.outputs.service_url }}
+          SERVICE_URL: ${{ steps.service-info.outputs.service_url }}
         run: |
           echo "Hitting ${SERVICE_URL}"
           health_status=$(curl -s -o /tmp/health.json -w "%{http_code}" "${SERVICE_URL}/health")
@@ -134,7 +136,7 @@ jobs:
       - name: Publish deployment info
         if: success()
         env:
-          SERVICE_URL: ${{ steps.tf-output.outputs.service_url }}
+          SERVICE_URL: ${{ steps.service-info.outputs.service_url }}
           IMAGE: ${{ steps.image.outputs.image }}
         run: |
           {
