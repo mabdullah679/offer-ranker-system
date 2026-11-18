@@ -64,22 +64,16 @@ Run `./scripts/smoke_test.sh https://your-service-url` or `python orchestrate.py
 
 ## CI/CD
 
-### `.github/workflows/ci.yml`
-- Trigger: push / PR to `main`.
-- Installs deps, runs tests, builds Docker image, pushes to Artifact Registry.
-- Runs `terraform init` and `terraform plan` (no apply) and uploads plan artifacts.
-- Requires secrets:
-  - `GCP_SERVICE_ACCOUNT_KEY`
-  - `GCP_PROJECT_ID`
-  - `GCP_REGION`
-  - `CLOUD_RUN_SERVICE_NAME`
-  - `ARTIFACT_REGISTRY_REPO`
-  - `CLOUD_RUN_SERVICE_ACCOUNT`
+Workflows in `.github/workflows/` (checked against the files, 2026-11-18):
 
-### `.github/workflows/deploy.yml`
-- Manual `workflow_dispatch` only.
-- Authenticates to GCP, runs `terraform apply -auto-approve`, captures Cloud Run URL, runs `scripts/smoke_test.sh`.
-- This is the only workflow allowed to apply Terraform.
+- `pr-checks.yml` – runs on pull requests and pushes to `main`, free runners, no cloud credentials: `pytest` in `api/`, `docker build`, gitleaks.
+- `ci.yml` – push to `dev` (only when the commit message contains `ci-cd`) or manual. Runs pytest, optional data-quality check, pip-audit, builds the image, Trivy scan (non-blocking), pushes to Artifact Registry. Needs GCP secrets.
+- `cd.yml` – after `ci` succeeds on `dev`, or manual. Deploys the image to Cloud Run, smoke-tests it, rolls back on failure.
+- `cd_dispatch.yml` – manual Cloud Run deploy.
+- `ci-cd.yml` – manual build, push and `terraform apply`.
+- `destroy.yml` – manual teardown of the Cloud Run service and Artifact Registry repo.
+
+Secrets used by the cloud workflows: `GCP_SA_KEY`, `GCP_PROJECT_ID`, `GCP_REGION`, `GCS_MODEL_BUCKET`.
 
 ## Master Orchestrator (`orchestrate.py`)
 
@@ -103,5 +97,4 @@ Each step writes logs to `/tmp/offer_ranker_logs/<timestamp>/<step>.log`.
 - [x] `make run-local` serves FastAPI; `/health` and `/predict` respond.
 - [x] `pytest` passes.
 - [x] `docker build` + `docker run` work using `$PORT`.
-- [x] GitHub Actions `ci` workflow builds/tests image and runs Terraform plan.
-- [x] `deploy` workflow (manual) applies Terraform and runs smoke tests.
+- [x] GitHub Actions `ci` workflow tests, builds and pushes the image; `ci-cd.yml` (manual) applies Terraform.
